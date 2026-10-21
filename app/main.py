@@ -13,7 +13,14 @@ STOP_WORDS = {
     "how", "can", "could", "would", "should", "please",
     "me", "my", "your", "our", "to", "of", "for", "in",
     "on", "at", "and", "or", "be", "have", "has", "had",
-    "tell", "about", "offer"
+    "tell", "about", "offer", "d", "like"
+}
+
+QUERY_EXPANSIONS = {
+    "arrange": {"book", "appointment"},
+    "visit": {"book", "appointment"},
+    "another": {"repeat"},
+    "find": {"located", "address"},
 }
 
 def tokenize(text: str) -> set[str]: # returns a set of tokens from the text string
@@ -29,6 +36,9 @@ def load_knowledge_base() -> list[dict]: # -> list[dict] is the return type of t
 def search_faqs(query: str, documents: list[dict]) -> list[dict]: # -> list[dict] is the return type of the function meaning, "->"  the function will return something that is a list of dictionaries
     """Rank FAQ documents by keyword overlap with the query."""
     query_words = tokenize(query) # this line tokenizes the query into a set of words
+
+    for word in list(query_words):
+         query_words.update(QUERY_EXPANSIONS.get(word, set()))
 
     if not query_words:
         return [] # if the query is empty, return an empty list
@@ -74,12 +84,55 @@ def main():
     return f"Question: {best_match['question']}\nAnswer: {best_match['answer']}\nScore: {best_match['score']}" # this line returns the best match
 
 
+def evaluate_retrieval():
+    """Measure whether retrieval returns the expected FAQ."""
+    documents = load_knowledge_base()
+
+    # Each query is paired with its expected FAQ ID.
+    # None means the system should reject the query.
+    test_cases = [
+        ("When does the clinic open?", 1),
+        ("I'd like to arrange a visit.", 2),
+        ("Can I get another prescription?", 5),
+        ("Does the clinic perform dental procedures?", None),
+        ("Where can I find the clinic?", 4),
+        ("How do I cancel my appointment?", 3),
+    ]
+
+    passed = 0
+
+    for query, expected_id in test_cases:
+        results = search_faqs(query, documents)
+
+        print(
+            "All candidates:",
+            [(result["id"], result["score"]) for result in results]
+        )
+        actual_id = results[0]["id"] if results else None
+
+        correct = actual_id == expected_id
+
+        if correct:
+            passed += 1
+
+        print(f"\nQuery: {query}")
+        print(f"Expected FAQ ID: {expected_id}")
+        print(f"Actual FAQ ID:   {actual_id}")
+        print(f"Result: {'PASS' if correct else 'FAIL'}")
+
+    total = len(test_cases)
+    print(f"\nEvaluation: {passed}/{total} correct")
+    print(f"Accuracy: {passed / total:.1%}")
+
+
+
 if __name__ == "__main__":
-    print(main())
+    evaluate_retrieval()
 
-    # SCORE FORMULAE IN ALGORITHM = 
-    # Score = 2Q + A / 2N
+# Scoring formula:
+# score = (2 * Q + A) / (2 * N)
+#
+# Q = number of matching words in the FAQ question.
+# A = number of additional matching words in the FAQ answer.
+# N = number of meaningful query words after query expansion.
 
-    # Q = number of matching words in the FAQ question.
-    # A = number of matching words in the FAQ answer.
-    # N = number of meaningful words in the user's query.
